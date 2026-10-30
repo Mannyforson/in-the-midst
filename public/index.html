@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>In the Midst</title>
+<meta name="description" content="Video gatherings for church: prayer meetings, Bible study and praise &amp; worship.">
+<meta name="theme-color" content="#14111d">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- ============ LOBBY ============ -->
+<section id="lobby" class="screen lobby">
+  <header class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">In the Midst</span>
+  </header>
+
+  <div class="lobby-grid">
+    <div class="lobby-intro">
+      <p class="eyebrow">Acts 1:14 · They all joined together constantly in prayer</p>
+      <h1>Gather to pray, study and worship, wherever your people are.</h1>
+      <p class="lede">Video meetings made for church. A shared prayer wall, scripture on everyone's screen, and worship lyrics the leader moves verse by verse.</p>
+
+      <div class="preview" id="preview">
+        <video id="previewVideo" autoplay muted playsinline></video>
+        <div id="previewAvatar" class="avatar"><span>?</span></div>
+        <div class="preview-controls">
+          <button id="pvMic" class="round" type="button"></button>
+          <button id="pvCam" class="round" type="button"></button>
+          <button id="pvSettings" class="round" type="button" title="Audio and video settings" aria-label="Audio and video settings"><span data-icon="sliders"></span></button>
+        </div>
+        <div class="level" aria-hidden="true"><i id="pvLevel"></i></div>
+      </div>
+    </div>
+
+    <div class="lobby-card">
+      <label class="field"><span>Your name</span>
+        <input id="nameInput" maxlength="40" autocomplete="name" placeholder="e.g. Sister Grace">
+      </label>
+
+      <div class="seg" role="tablist">
+        <button type="button" role="tab" data-tab="start" aria-selected="true">Start a gathering</button>
+        <button type="button" role="tab" data-tab="join" aria-selected="false">Join with a code</button>
+      </div>
+
+      <form id="startForm" class="tabpane">
+        <fieldset class="types">
+          <legend>What kind of gathering?</legend>
+          <label class="type"><input type="radio" name="type" value="prayer" checked>
+            <span class="t-name">Prayer Meeting</span><span class="t-desc">Opens with the prayer wall</span></label>
+          <label class="type"><input type="radio" name="type" value="bible">
+            <span class="t-name">Bible Study</span><span class="t-desc">Look up and share passages</span></label>
+          <label class="type"><input type="radio" name="type" value="worship">
+            <span class="t-name">Praise &amp; Worship</span><span class="t-desc">Lyrics on screen, music sound</span></label>
+          <label class="type"><input type="radio" name="type" value="fellowship">
+            <span class="t-name">Fellowship</span><span class="t-desc">A plain video gathering</span></label>
+        </fieldset>
+        <label class="field"><span>Title</span>
+          <input id="titleInput" maxlength="80" placeholder="Wednesday Night Prayer">
+        </label>
+        <label class="check"><input type="checkbox" id="waitingInput" checked>
+          <span>Use a waiting room. You let each person in.</span></label>
+        <button class="btn primary" type="submit">Start gathering</button>
+      </form>
+
+      <form id="joinForm" class="tabpane" hidden>
+        <label class="field"><span>Meeting code</span>
+          <input id="codeInput" inputmode="numeric" placeholder="123-456-789" autocomplete="off">
+        </label>
+        <p id="joinInfo" class="hint"></p>
+        <button class="btn primary" type="submit">Join</button>
+      </form>
+
+      <p id="lobbyError" class="error" role="alert"></p>
+
+      <div id="recent" class="recent" hidden>
+        <h3>Your gatherings</h3>
+        <p class="hint">Each one keeps its code and prayer wall, so you can reuse it every week.</p>
+        <ul id="recentList"></ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WAITING / ENDED ============ -->
+<section id="notice" class="screen notice-screen" hidden>
+  <div class="notice-card">
+    <span class="brand-mark big" aria-hidden="true"></span>
+    <h2 id="noticeTitle"></h2>
+    <p id="noticeText"></p>
+    <button id="noticeBtn" class="btn" type="button">Back to start</button>
+  </div>
+</section>
+
+<!-- ============ MEETING ============ -->
+<section id="meeting" class="screen meeting" hidden>
+  <header class="topbar">
+    <div class="tb-left">
+      <span id="typePill" class="pill"></span>
+      <h2 id="roomTitle"></h2>
+    </div>
+    <div class="tb-right">
+      <span id="recBadge" class="badge rec" hidden>Recording</span>
+      <span id="lockBadge" class="badge" hidden><span data-icon="lock"></span>Locked</span>
+      <span id="clock" class="clock"></span>
+      <button id="inviteBtn" class="chip" type="button" title="Copy invite"><span data-icon="copy"></span><span id="codeText"></span></button>
+      <button id="viewBtn" class="chip" type="button"></button>
+    </div>
+  </header>
+
+  <div class="meet-body">
+    <main class="stage" id="stage">
+      <div id="tiles" class="tiles"></div>
+
+      <div id="overlay" class="overlay-card" hidden>
+        <p class="ov-kind"></p>
+        <h3 class="ov-title"></h3>
+        <p class="ov-text"></p>
+        <p class="ov-by"></p>
+        <button class="ov-close" id="ovClose" type="button" title="Remove from screen" aria-label="Remove from screen"><span data-icon="x"></span></button>
+      </div>
+
+      <div id="lyrics" class="lyrics" hidden>
+        <p class="ly-title"></p>
+        <div class="ly-text"></div>
+        <div class="ly-ctl" hidden>
+          <button id="lyPrev" type="button" aria-label="Previous slide"><span data-icon="left"></span></button>
+          <span id="lyCount"></span>
+          <button id="lyNext" type="button" aria-label="Next slide"><span data-icon="right"></span></button>
+        </div>
+      </div>
+
+      <div id="floaters" class="floaters" aria-hidden="true"></div>
+      <button id="waitAlert" class="wait-alert" type="button" hidden></button>
+    </main>
+
+    <aside id="panel" class="panel" hidden>
+      <header class="panel-head">
+        <nav class="panel-tabs">
+          <button type="button" data-panel="chat">Chat</button>
+          <button type="button" data-panel="people">People</button>
+          <button type="button" data-panel="prayer">Prayer wall</button>
+          <button type="button" data-panel="scripture">Scripture</button>
+          <button type="button" data-panel="worship">Worship</button>
+        </nav>
+        <button id="panelClose" class="icon-btn" type="button" aria-label="Close panel"><span data-icon="x"></span></button>
+      </header>
+
+      <div class="panel-body">
+        <!-- Chat -->
+        <section class="pane" data-pane="chat">
+          <div id="chatList" class="chat-list"><p class="empty">Messages you send here go to everyone unless you choose one person.</p></div>
+          <form id="chatForm" class="chat-form">
+            <label class="to">To <select id="chatTo"><option value="">Everyone</option></select></label>
+            <div class="chat-row">
+              <textarea id="chatInput" rows="1" maxlength="1000" placeholder="Type a message"></textarea>
+              <button class="send" type="submit" aria-label="Send"><span data-icon="send"></span></button>
+            </div>
+          </form>
+        </section>
+
+        <!-- People -->
+        <section class="pane" data-pane="people">
+          <div id="hostTools" class="host-tools" hidden>
+            <div class="row wrap">
+              <button id="muteAllBtn" class="btn sm" type="button">Mute all</button>
+              <button id="lowerHandsBtn" class="btn sm" type="button">Lower all hands</button>
+            </div>
+            <label class="switch"><input type="checkbox" id="lockToggle"><span>Lock gathering</span></label>
+            <label class="switch"><input type="checkbox" id="waitToggle"><span>Waiting room</span></label>
+          </div>
+          <div id="waitingBox" class="waiting-box" hidden></div>
+          <ul id="peopleList" class="people"></ul>
+        </section>
+
+        <!-- Prayer wall -->
+        <section class="pane" data-pane="prayer">
+          <form id="prayerForm" class="stack">
+            <textarea id="prayerText" rows="3" maxlength="600" placeholder="What would you like the group to pray for?"></textarea>
+            <div class="row between wrap">
+              <label class="check small"><input type="checkbox" id="prayerAnon"> <span>Post without my name</span></label>
+              <button class="btn primary sm" type="submit">Add request</button>
+            </div>
+          </form>
+          <div class="seg small" id="prayerFilter">
+            <button type="button" data-pf="open" aria-selected="true">Praying</button>
+            <button type="button" data-pf="answered" aria-selected="false">Answered</button>
+          </div>
+          <ul id="prayerList" class="prayers"></ul>
+        </section>
+
+        <!-- Scripture -->
+        <section class="pane" data-pane="scripture">
+          <form id="verseForm" class="stack">
+            <label class="field"><span>Passage</span>
+              <div class="row">
+                <input id="verseRef" placeholder="John 3:16-17" autocomplete="off">
+                <select id="verseTr" aria-label="Translation">
+                  <option value="kjv">KJV</option>
+                  <option value="web">WEB</option>
+                  <option value="bbe">BBE</option>
+                  <option value="darby">Darby</option>
+                </select>
+              </div>
+            </label>
+            <button class="btn sm" type="submit">Look up</button>
+          </form>
+          <div id="versePreview"></div>
+          <details class="manual">
+            <summary>Type a passage yourself</summary>
+            <form id="manualVerse" class="stack">
+              <input id="mvRef" maxlength="120" placeholder="Reference, e.g. Psalm 23:1 (NIV)">
+              <textarea id="mvText" rows="4" maxlength="2500" placeholder="Paste or type the verse text"></textarea>
+              <button class="btn primary sm" type="submit">Show to everyone</button>
+            </form>
+          </details>
+          <div id="onScreen" class="on-screen"></div>
+        </section>
+
+        <!-- Worship -->
+        <section class="pane" data-pane="worship">
+          <div id="worshipHost">
+            <form id="songForm" class="stack">
+              <input id="songTitle" maxlength="120" placeholder="Song title">
+              <textarea id="songLyrics" rows="8" placeholder="Paste the lyrics. Leave a blank line between verses; each block becomes one slide."></textarea>
+              <button class="btn primary sm" type="submit">Present lyrics</button>
+            </form>
+            <div id="songLib" class="song-lib"></div>
+          </div>
+          <p id="worshipGuest" class="hint">The worship leader moves the lyrics. They show on everyone's screen.</p>
+          <div id="worshipCtl" class="row wrap" hidden>
+            <button id="wPrev" class="btn sm" type="button">Previous</button>
+            <button id="wNext" class="btn sm" type="button">Next</button>
+            <button id="wStop" class="btn sm" type="button">Stop presenting</button>
+          </div>
+          <ol id="slideList" class="slides"></ol>
+          <p class="tip">Singing or playing an instrument? Open Settings and turn on <b>Original sound for music</b>, and wear headphones.</p>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="toolbar">
+    <div class="tb-group">
+      <button class="tool" id="tMic" type="button"><span class="ic"></span><span class="lb"></span></button>
+      <button class="tool" id="tCam" type="button"><span class="ic"></span><span class="lb"></span></button>
+    </div>
+    <div class="tb-group center">
+      <button class="tool" id="tShare" type="button"><span class="ic" data-icon="share"></span><span class="lb">Share</span></button>
+      <button class="tool" id="tRec" type="button"><span class="ic" data-icon="record"></span><span class="lb">Record</span></button>
+      <button class="tool" id="tReact" type="button"><span class="ic" data-icon="smile"></span><span class="lb">React</span></button>
+      <button class="tool" id="tHand" type="button"><span class="ic" data-icon="hand"></span><span class="lb">Raise hand</span></button>
+      <button class="tool" data-panel="chat" type="button"><span class="ic" data-icon="chat"></span><span class="lb">Chat</span><b class="count" id="chatCount" hidden></b></button>
+      <button class="tool" data-panel="people" type="button"><span class="ic" data-icon="users"></span><span class="lb">People</span><b class="count muted" id="peopleCount"></b></button>
+      <button class="tool" data-panel="prayer" type="button"><span class="ic" data-icon="flame"></span><span class="lb">Prayer</span><b class="count muted" id="prayerCount" hidden></b></button>
+      <button class="tool" data-panel="scripture" type="button"><span class="ic" data-icon="book"></span><span class="lb">Scripture</span></button>
+      <button class="tool" data-panel="worship" type="button"><span class="ic" data-icon="music"></span><span class="lb">Worship</span></button>
+      <button class="tool" id="tSettings" type="button"><span class="ic" data-icon="sliders"></span><span class="lb">Settings</span></button>
+    </div>
+    <div class="tb-group">
+      <button class="tool leave" id="tLeave" type="button"><span class="ic" data-icon="leave"></span><span class="lb">Leave</span></button>
+    </div>
+  </footer>
+
+  <div id="reactPop" class="popover" hidden role="menu"></div>
+</section>
+
+<!-- ============ DIALOGS ============ -->
+<dialog id="settingsDlg" class="dlg">
+  <form method="dialog" class="stack">
+    <h3>Audio and video</h3>
+    <label class="field"><span>Microphone</span><select id="selMic"></select></label>
+    <label class="field"><span>Camera</span><select id="selCam"></select></label>
+    <label class="field" id="spkField"><span>Speaker</span><select id="selSpk"></select></label>
+    <label class="check"><input type="checkbox" id="musicMode">
+      <span><b>Original sound for music.</b> Turns off echo cancelling and noise reduction so singing and instruments sound natural. Wear headphones when this is on.</span></label>
+    <label class="check"><input type="checkbox" id="mirrorMode"> <span>Mirror my video</span></label>
+    <p class="hint">Shortcuts: Alt+A mute, Alt+V video, Alt+S share, Alt+Y raise hand. Hold Space to talk while muted.</p>
+    <div class="row end"><button class="btn primary" value="close">Done</button></div>
+  </form>
+</dialog>
+
+<dialog id="leaveDlg" class="dlg">
+  <form method="dialog" class="stack">
+    <h3>Leave this gathering?</h3>
+    <p id="leaveText" class="hint"></p>
+    <div class="stack">
+      <button class="btn danger" value="end" id="endAllBtn">End gathering for everyone</button>
+      <button class="btn" value="leave">Leave gathering</button>
+      <button class="btn ghost" value="cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
