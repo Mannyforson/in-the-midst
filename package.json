@@ -1,0 +1,13 @@
+{
+  "name": "in-the-midst",
+  "version": "1.0.0",
+  "description": "Video gatherings for church: prayer meetings, Bible study and praise & worship.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
