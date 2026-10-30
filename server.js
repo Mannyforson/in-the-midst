@@ -182,7 +182,7 @@ function serveStatic(req, res, pathname) {
 const routes = [];
 const app = {
   post: (p, fn) => routes.push({ method: 'POST', p, fn }),
-  get: (p, fn) => routes.push({ method: 'GET', p, fn }),
+  get: (p, fn) => routes.push({ method: 'GET', p, fn }), delete: (p, fn) => routes.push({ method: 'DELETE', p, fn }),
 };
 const server = http.createServer(async (req, res) => {
   
@@ -206,10 +206,10 @@ const url = new URL(req.url, 'http://localhost');
     }
     const reply = {
       status(code) { this.code = code; return this; },
-      json(obj) { json(res, this.code || 200, obj); },
+      header(name, value) { (this.headers ??= {})[name] = value; return this; }, json(obj) { res.writeHead(this.code || 200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...(this.headers || {}), }); res.end(JSON.stringify(obj)); },
       send(text) { res.writeHead(this.code || 200, { 'Content-Type': 'text/plain' }); res.end(text); },
     };
-    try { return r.fn({ params, body }, reply); } catch (e) { console.error(e); return json(res, 500, { error: 'Server error' }); }
+    try { return r.fn({ params, body, headers: req.headers }, reply); } catch (e) { console.error(e); return json(res, 500, { error: 'Server error' }); }
   }
   if (req.method === 'GET' || req.method === 'HEAD') return serveStatic(req, res, url.pathname);
   json(res, 405, { error: 'Method not allowed' });
@@ -359,7 +359,7 @@ app.get('/api/rooms/:id', (req, res) => {
 });
 
 app.get('/api/ice', (_req, res) => res.json(iceServers()));
-app.get('/healthz', (_req, res) => res.send('ok'));
+app.get('/healthz', (_req, res) => res.send('ok')); const ADMIN_STARTED_AT = Date.now(); const ADMIN_SESSIONS = new Map(); const ADMIN_TTL_MS = 24 * 60 * 60 * 1000; function adminHash(s) { return crypto.createHash('sha256').update(String(s)).digest(); } function adminPasswordOk(pw) { const configured = process.env.ADMIN_PASSWORD; if (!configured) return false; return crypto.timingSafeEqual(adminHash(pw || ''), adminHash(configured)); } function adminSessionFrom(headers) { const raw = (headers && headers.cookie) || ''; const part = raw.split(';').map(s => s.trim()).find(s => s.startsWith('admin_session=')); if (!part) return null; const token = part.slice('admin_session='.length); const exp = ADMIN_SESSIONS.get(token); if (!exp) return null; if (Date.now() > exp) { ADMIN_SESSIONS.delete(token); return null; } return token; } function adminGuard(h, res) { if (!adminSessionFrom(h.headers)) { res.status(401).json({ error: 'Unauthorized' }); return false; } return true; } function adminSetCookie(res, token, maxAge) { res.header('Set-Cookie', `admin_session=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=${maxAge}`); } app.post('/api/admin/login', (h, res) => { if (!process.env.ADMIN_PASSWORD) return res.status(503).json({ error: 'Admin login is not configured on this server.' }); if (!adminPasswordOk(h.body && h.body.password)) return res.status(401).json({ error: 'Wrong password.' }); const token = crypto.randomBytes(32).toString('hex'); ADMIN_SESSIONS.set(token, Date.now() + ADMIN_TTL_MS); adminSetCookie(res, token, 24 * 60 * 60); return res.json({ ok: true }); }); app.post('/api/admin/logout', (h, res) => { const t = adminSessionFrom(h.headers); if (t) ADMIN_SESSIONS.delete(t); adminSetCookie(res, '', 0); return res.json({ ok: true }); }); app.get('/api/admin/me', (h, res) => { if (!adminGuard(h, res)) return; return res.json({ ok: true }); }); app.get('/api/admin/rooms', (h, res) => { if (!adminGuard(h, res)) return; const rooms = []; for (const [id, r] of live) { const m = saved[id]; if (!m) continue; rooms.push({ id, title: m.title, type: m.type, typeLabel: TYPES[m.type], createdAt: m.createdAt, waitingRoom: !!m.waitingRoom, locked: !!r.locked, participants: [...r.participants.values()].map(p => ({ id: p.id, name: p.name, host: !!p.host, mic: !!p.mic, cam: !!p.cam, hand: !!p.hand, joinedAt: p.joinedAt, })), waiting: [...r.waiting.values()].map(w => ({ id: w.id, name: w.name })), participantCount: r.participants.size, waitingCount: r.waiting.size, }); } rooms.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); return res.json({ rooms }); }); app.post('/api/admin/rooms/:id/end', (h, res) => { if (!adminGuard(h, res)) return; const id = normalize(h.params.id); const r = live.get(id); if (!r) return res.json({ ok: true, ended: false }); for (const sid of [...r.participants.keys(), ...r.waiting.keys()]) { const s = clients.get(sid); io.to(sid).emit('ended'); if (s) { s.leave(id); s.data.roomId = null; } } live.delete(id); return res.json({ ok: true, ended: true }); }); app.get('/api/admin/prayers', (h, res) => { if (!adminGuard(h, res)) return; const out = []; for (const [roomId, m] of Object.entries(saved)) { for (const p of (m.prayers || [])) { out.push({ id: p.id, roomId, roomTitle: m.title, text: p.text, by: p.by, at: p.at, answered: !!p.answered, prayedCount: (p.prayed || []).length, }); } } out.sort((a, b) => (b.at || 0) - (a.at || 0)); return res.json({ prayers: out }); }); app.delete('/api/admin/prayers/:id', (h, res) => { if (!adminGuard(h, res)) return; const pid = h.params.id; for (const [roomId, m] of Object.entries(saved)) { const i = (m.prayers || []).findIndex(p => p.id === pid); if (i >= 0) { m.prayers.splice(i, 1); persist(); if (live.has(roomId)) broadcast(roomId); return res.json({ ok: true }); } } return res.status(404).json({ error: 'Prayer post not found.' }); }); app.get('/api/admin/stats', (h, res) => { if (!adminGuard(h, res)) return; let participants = 0, waiting = 0, totalPrayers = 0; for (const r of live.values()) { participants += r.participants.size; waiting += r.waiting.size; } for (const m of Object.values(saved)) totalPrayers += (m.prayers || []).length; return res.json({ liveRooms: live.size, savedRooms: Object.keys(saved).length, participants, waiting, totalPrayers, uptimeSeconds: Math.floor(process.uptime()), startedAt: ADMIN_STARTED_AT, }); });
 
 // ---------- sockets ----------
 function onConnection(socket) {
