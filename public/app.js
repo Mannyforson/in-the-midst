@@ -1,6 +1,12 @@
 /* In the Midst client: WebRTC mesh + meeting UI */
 (() => {
 'use strict';
+  function serverBase() {
+    try {
+      if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return 'https://in-the-midst.onrender.com';
+    } catch (e) {}
+    return '';
+  }
 
 // ---------------------------------------------------------------- utilities
 const $ = (s, r = document) => r.querySelector(s);
@@ -263,7 +269,7 @@ const lookupCode = debounce(async () => {
   const info = $('#joinInfo');
   if (code.replace(/\D/g, '').length !== 9) { info.textContent = ''; return; }
   try {
-    const r = await fetch('/api/rooms/' + code);
+    const r = await fetch(serverBase() + '/api/rooms/' + code);
     const d = await r.json();
     info.textContent = r.ok ? `${d.title} · ${d.typeLabel} · ${d.count ? d.count + ' here now' : 'no one here yet'}` : d.error;
   } catch { info.textContent = ''; }
@@ -325,7 +331,7 @@ function initLobby() {
     const type = $('#startForm').querySelector('input[name=type]:checked').value;
     const btn = e.submitter; if (btn) btn.disabled = true;
     try {
-      const r = await fetch('/api/rooms', {
+      const r = await fetch(serverBase() + '/api/rooms', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: $('#titleInput').value.trim(), type, waitingRoom: $('#waitingInput').checked }),
       });
@@ -398,7 +404,7 @@ function createConnection() {
     },
   };
   function open() {
-    ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws = new WebSocket(serverBase() ? serverBase().replace(/^http/, 'ws') + '/ws' : (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
     ws.onopen = () => { retry = 0; api.connected = true; fire('connect'); };
     ws.onmessage = ev => {
       let m; try { m = JSON.parse(ev.data); } catch { return; }
@@ -448,7 +454,7 @@ async function joinRoom(code, asHost = false) {
   ensureAudioCtx();
   lobbyError('');
   if (!S.ice) {
-    try { S.ice = await (await fetch('/api/ice')).json(); }
+    try { S.ice = await (await fetch(serverBase() + '/api/ice')).json(); }
     catch { S.ice = [{ urls: 'stun:stun.l.google.com:19302' }]; }
   }
   S.roomId = code; 
@@ -1138,7 +1144,7 @@ function initSettings() {
 // ---------------------------------------------------------------- invite, leave, end
 async function copyInvite() {
   const r = S.room; if (!r) return;
-  const link = `${location.origin}/?room=${r.id}`;
+  const link = `${(serverBase() || location.origin)}/?room=${r.id}`;
   const text = `You're invited to "${r.title}" (${r.typeLabel}) on In the Midst.\nJoin here: ${link}\nMeeting code: ${r.id}`;
   try { await navigator.clipboard.writeText(text); toast('Invite copied. Paste it into a text, email or group chat.'); }
   catch {
