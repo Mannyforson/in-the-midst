@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In the Midst — Admin</title>
+<style>
+  :root { --bg: #14111d; --panel: #1e1a2e; --line: #2e2845; --text: #f2eefb; --muted: #a89fc2; --gold: #e8b14f; --red: #e5484d; --green: #46a758; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 20px; margin: 0; }
+  header h1 span { color: var(--gold); }
+  main { max-width: 900px; margin: 0 auto; padding: 20px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  h2 { margin: 0 0 12px; font-size: 17px; }
+  p { color: var(--muted); }
+  input, button { font-size: 15px; border-radius: 8px; border: 1px solid var(--line); padding: 10px 12px; }
+  input { background: var(--bg); color: var(--text); width: 100%; margin-bottom: 10px; }
+  button { background: var(--gold); color: #14111d; font-weight: 700; border: 0; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button.danger { background: var(--red); color: #fff; }
+  .err { color: var(--red); }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+  .card { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .card b { display: block; font-size: 26px; color: var(--gold); }
+  .card span { color: var(--muted); font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); font-size: 14px; vertical-align: top; }
+  th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--line); }
+  .badge.green { background: var(--green); color: #fff; }
+  ul.prayers { list-style: none; padding: 0; margin: 0; }
+  ul.prayers li { border-bottom: 1px solid var(--line); padding: 12px 0; display: flex; justify-content: space-between; gap: 12px; }
+  ul.prayers li p { color: var(--text); margin: 4px 0; white-space: pre-wrap; word-break: break-word; }
+  ul.prayers li small { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>In the Midst <span>— Admin</span></h1>
+  <button id="logoutBtn" class="ghost" hidden>Log out</button>
+</header>
+<main>
+  <section id="loginCard">
+    <h2>Admin login</h2>
+    <p>Enter the admin password set on the server (ADMIN_PASSWORD).</p>
+    <form id="loginForm">
+      <input id="pw" type="password" autocomplete="current-password" placeholder="Admin password" required>
+      <button type="submit">Log in</button>
+    </form>
+    <p id="loginErr" class="err" hidden></p>
+  </section>
+
+  <section id="dash" hidden>
+    <div id="stats" class="cards"></div>
+  </section>
+
+  <section id="roomsCard" hidden>
+    <div class="row">
+      <h2>Live gatherings</h2>
+      <button id="refreshBtn" class="ghost">Refresh</button>
+    </div>
+    <p id="roomsEmpty">No live gatherings right now.</p>
+    <table id="roomsTable" hidden>
+      <thead><tr><th>Title</th><th>Type</th><th>Code</th><th>People</th><th>Waiting</th><th></th></tr></thead>
+      <tbody id="roomsBody"></tbody>
+    </table>
+  </section>
+
+  <section id="prayersCard" hidden>
+    <h2>Prayer wall</h2>
+    <p id="prayersEmpty">No prayer posts yet.</p>
+    <ul id="prayersList" class="prayers"></ul>
+  </section>
+
+  <p id="dashErr" class="err" hidden></p>
+</main>
+<script>
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmtTime = t => t ? new Date(t).toLocaleString() : '';
+  const fmtUptime = sec => {
+    sec = Math.floor(sec || 0);
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return h ? `${h}h ${m}m` : (m ? `${m}m ${s}s` : `${s}s`);
+  };
+  let poll = null;
+
+  function showLogin(msg) {
+    $('#loginCard').hidden = false;
+    $('#dash').hidden = $('#roomsCard').hidden = $('#prayersCard').hidden = true;
+    $('#logoutBtn').hidden = true;
+    if (poll) { clearInterval(poll); poll = null; }
+    if (msg) { $('#loginErr').textContent = msg; $('#loginErr').hidden = false; }
+  }
+  function showDash() {
+    $('#loginCard').hidden = true;
+    $('#loginErr').hidden = true;
+    $('#dash').hidden = $('#roomsCard').hidden = $('#prayersCard').hidden = false;
+    $('#logoutBtn').hidden = false;
+    if (!poll) poll = setInterval(loadAll, 20000);
+  }
+  async function api(path, opts) {
+    const r = await fetch(path, { credentials: 'same-origin', ...(opts || {}) });
+    if (r.status === 401) { showLogin('Session expired — please log in again.'); throw new Error('unauthorized'); }
+    let body = {};
+    try { body = await r.json(); } catch (e) { /* non-JSON body */ }
+    if (!r.ok) throw new Error(body.error || ('Request failed (' + r.status + ')'));
+    return body;
+  }
+  function renderStats(s) {
+    $('#stats').innerHTML = [
+      ['Live gatherings', s.liveRooms], ['Participants', s.participants],
+      ['Waiting', s.waiting], ['Prayer posts', s.totalPrayers],
+      ['Saved rooms', s.savedRooms], ['Uptime', fmtUptime(s.uptimeSeconds)],
+    ].map(([label, val]) => `<div class="card"><b>${esc(val)}</b><span>${esc(label)}</span></div>`).join('');
+  }
+  function renderRooms(rooms) {
+    $('#roomsEmpty').hidden = rooms.length > 0;
+    $('#roomsTable').hidden = rooms.length === 0;
+    $('#roomsBody').innerHTML = rooms.map(r => {
+      const names = r.participants.map(p => esc(p.name) + (p.host ? ' (host)' : '')).join(', ');
+      return `<tr>
+        <td>${esc(r.title)}${r.locked ? ' <span class="badge">locked</span>' : ''}</td>
+        <td>${esc(r.typeLabel || r.type)}</td>
+        <td>${esc(r.id)}</td>
+        <td title="${names}">${r.participantCount}</td>
+        <td>${r.waitingCount}</td>
+        <td><button class="danger" data-end="${esc(r.id)}">End</button></td>
+      </tr>`;
+    }).join('');
+    document.querySelectorAll('[data-end]').forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm('End this gathering for everyone?')) return;
+        try { await api('/api/admin/rooms/' + encodeURIComponent(btn.dataset.end) + '/end', { method: 'POST' }); await loadAll(); }
+        catch (e) { if (e.message !== 'unauthorized') alert(e.message); }
+      };
+    });
+  }
+  function renderPrayers(prayers) {
+    $('#prayersEmpty').hidden = prayers.length > 0;
+    $('#prayersList').innerHTML = prayers.map(p => `<li>
+      <div>
+        <small>${esc(p.roomTitle)} · ${p.by ? esc(p.by) : 'Anonymous'} · ${esc(fmtTime(p.at))} · ${p.prayedCount} prayed${p.answered ? ' · <span class="badge green">answered</span>' : ''}</small>
+        <p>${esc(p.text)}</p>
+      </div>
+      <div><button class="danger" data-del="${esc(p.id)}">Delete</button></div>
+    </li>`).join('');
+    document.querySelectorAll('[data-del]').forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm('Delete this prayer post?')) return;
+        try { await api('/api/admin/prayers/' + encodeURIComponent(btn.dataset.del), { method: 'DELETE' }); await loadAll(); }
+        catch (e) { if (e.message !== 'unauthorized') alert(e.message); }
+      };
+    });
+  }
+  async function loadAll() {
+    try {
+      const [s, r, p] = await Promise.all([
+        api('/api/admin/stats'), api('/api/admin/rooms'), api('/api/admin/prayers'),
+      ]);
+      renderStats(s); renderRooms(r.rooms); renderPrayers(p.prayers);
+    } catch (e) { if (e.message !== 'unauthorized') { $('#dashErr').textContent = e.message; $('#dashErr').hidden = false; } }
+  }
+  $('#loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    $('#loginErr').hidden = true;
+    try {
+      await api('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: $('#pw').value }),
+      });
+      $('#pw').value = '';
+      showDash();
+      await loadAll();
+    } catch (err) {
+      if (err.message !== 'unauthorized') { $('#loginErr').textContent = err.message; $('#loginErr').hidden = false; }
+    }
+  });
+  $('#logoutBtn').addEventListener('click', async () => {
+    try { await api('/api/admin/logout', { method: 'POST' }); } catch (e) { /* ignore */ }
+    showLogin();
+  });
+  $('#refreshBtn').addEventListener('click', loadAll);
+  (async () => {
+    try { await api('/api/admin/me'); showDash(); await loadAll(); }
+    catch (e) { if (e.message !== 'unauthorized') showLogin(); }
+  })();
+</script>
+</body>
+</html>
