@@ -75,6 +75,10 @@ jobs:
                   f.write(block)
           print(open(path).read()[-600:])
           EOF
+      - name: Generate launcher icons
+        run: |
+          npm install @capacitor/assets
+          npx @capacitor/assets generate --android
       - name: Build debug APK
         run: |
           cd android
