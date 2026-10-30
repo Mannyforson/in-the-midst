@@ -336,7 +336,7 @@ function initLobby() {
       list.unshift({ id: d.id, title: d.title, type: d.type });
       store.set('ur:hosted', list.slice(0, 12));
       S.freshStart = true;
-      await joinRoom(d.id);
+      await joinRoom(d.id, true);
     } catch { lobbyError('Could not start the gathering. Check your internet connection and try again.'); }
     finally { if (btn) btn.disabled = false; }
   });
@@ -351,7 +351,7 @@ function initLobby() {
 
   $('#recentList').addEventListener('click', e => {
     const s = e.target.closest('[data-start]'), f = e.target.closest('[data-forget]');
-    if (s && checkName()) { S.freshStart = true; joinRoom(s.dataset.start); }
+    if (s && checkName()) { S.freshStart = true; joinRoom(s.dataset.start, true); }
     if (f) { store.set('ur:hosted', store.get('ur:hosted', []).filter(x => x.id !== f.dataset.forget)); renderRecent(); }
   });
 
@@ -419,6 +419,7 @@ function createConnection() {
 function connectSocket() {
   if (S.socket) return;
   const sock = S.socket = createConnection();
+  
   sock.on('state', st => { if (S.inMeeting) { S.room = st; renderRoom(); } });
   sock.on('signal', onSignal);
   sock.on('peer-left', closePeer);
@@ -439,18 +440,19 @@ function connectSocket() {
 }
 function emitJoin() {
   S.socket.emit('join', {
-    roomId: S.roomId, name: S.name, hostKey: store.get('ur:host:' + S.roomId, null),
+    roomId: S.roomId, name: S.name, hostKey: S.asHost ? store.get('ur:host:' + S.roomId, null) : null,
     mic: S.micOn && !!S.audioTrack, cam: S.camOn && !!S.videoTrack,
   }, onJoined);
 }
-async function joinRoom(code) {
+async function joinRoom(code, asHost = false) {
   ensureAudioCtx();
   lobbyError('');
   if (!S.ice) {
     try { S.ice = await (await fetch('/api/ice')).json(); }
     catch { S.ice = [{ urls: 'stun:stun.l.google.com:19302' }]; }
   }
-  S.roomId = code;
+  S.roomId = code; 
+  S.asHost = asHost;
   connectSocket();
   if (S.socket.connected) emitJoin();
   else S.socket.once('connect', () => { if (!S.inMeeting && !S.waiting) emitJoin(); });
@@ -755,6 +757,7 @@ function openPanel(name) {
   S.panel = name;
   $('#panel').hidden = false;
   $$('.panel-tabs [data-panel]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.panel === name)));
+  document.querySelector('.panel-tabs [data-panel="' + name + '"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   $$('.pane').forEach(p => { p.hidden = p.dataset.pane !== name; });
   if (name === 'chat') {
     S.unread = 0;
