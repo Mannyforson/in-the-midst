@@ -161,7 +161,7 @@ function readJson(req) {
 function serveStatic(req, res, pathname) {
   let p;
   try { p = decodeURIComponent(pathname); } catch { return json(res, 400, { error: 'Bad path' }); }
-  if (p === '/') p = '/index.html';
+  if (p === '/') p = '/index.html'; if (p === '/privacy') p = '/privacy.html';
   const file = path.normalize(path.join(PUBLIC, p));
   if (!file.startsWith(PUBLIC + path.sep)) return json(res, 404, { error: 'Not found' });
   fs.stat(file, (err, st) => {
