@@ -1,0 +1,107 @@
+name: Build iOS app and upload to TestFlight
+
+# Builds the In the Midst iOS app (Capacitor 8 shell around the web app) on a
+# macOS runner (no Mac is available locally) and uploads it to TestFlight via
+# fastlane, authenticated with an App Store Connect API key. No fastlane match
+# certificate repo is used; signing is cert + sigh with the API key (see
+# fastlane/Fastfile).
+#
+# RUNS MANUALLY ONLY (workflow_dispatch). macOS runner minutes are expensive,
+# so this deliberately does NOT run on push, unlike the Android workflows.
+#
+# REPO FILES THIS WORKFLOW EXPECTS (all must be in the repo together):
+#   .github/workflows/ios.yml  <- this file
+#   fastlane/Fastfile          <- the lane
+#   Gemfile                    <- repo root, declares fastlane
+#
+# GITHUB SECRETS REQUIRED:
+#   APP_STORE_CONNECT_ISSUER_ID     (App Store Connect API key issuer ID)
+#   APP_STORE_CONNECT_KEY_ID        (App Store Connect API key ID)
+#   APP_STORE_CONNECT_PRIVATE_KEY   (RAW contents of the .p8 file, NOT base64;
+#                                    the Fastfile passes is_key_content_base64: false)
+# OPTIONAL (steady state, see Fastfile notes):
+#   CERT_P12_BASE64                 (base64 of a distribution cert .p12)
+#   CERT_PASSWORD                   (password for that .p12)
+#
+# FIRST-RUN NOTES:
+# - The lane creates the App Store Connect app record + App ID via `produce`
+#   if missing. If that fails, create the app record manually in App Store
+#   Connect (bundle ID com.inthemidst.app) and re-run.
+# - Without CERT_P12_BASE64, the lane runs `cert`, which creates a NEW
+#   distribution certificate on every run (ephemeral runner, no persisted
+#   keychain). Apple allows only ~2-3 active distribution certificates per
+#   team, so migrate to the CERT_P12 import mode before that limit is hit:
+#   create one distribution certificate (openssl CSR + developer.apple.com),
+#   export it as .p12, and store it as CERT_P12_BASE64 + CERT_PASSWORD.
+# - pilot distributes to internal TestFlight testers only by default.
+#   External TestFlight distribution needs App Review (separate step).
+# - First upload is version 1.0 (build 1). Later uploads need a build-number
+#   bump before re-running (not handled by this lane).
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Capacitor
+        run: npm install @capacitor/core @capacitor/cli @capacitor/ios
+      - name: Create iOS project
+        run: |
+          npx cap init "In the Midst" com.inthemidst.app --web-dir=public
+          npx cap add ios
+      - name: Point the app at the live server
+        run: |
+          cat > capacitor.config.ts << 'EOF'
+          import type { CapacitorConfig } from '@capacitor/cli';
+          const config: CapacitorConfig = {
+            appId: 'com.inthemidst.app',
+            appName: 'In the Midst',
+            webDir: 'public',
+            server: {
+              url: 'https://in-the-midst.onrender.com',
+              cleartext: false,
+            },
+          };
+          export default config;
+          EOF
+          npx cap sync ios
+      - name: Generate launcher icons
+        run: |
+          npm install @capacitor/assets
+          npx @capacitor/assets generate --ios
+      - name: Add camera and microphone usage descriptions
+        run: |
+          python3 - << 'EOF'
+          import plistlib
+          path = 'ios/App/App/Info.plist'
+          with open(path, 'rb') as f:
+              pl = plistlib.load(f)
+          pl['NSCameraUsageDescription'] = 'In the Midst uses your camera for video gatherings.'
+          pl['NSMicrophoneUsageDescription'] = 'In the Midst uses your microphone for audio in gatherings.'
+          with open(path, 'wb') as f:
+              plistlib.dump(pl, f)
+          print('NSCameraUsageDescription:', pl['NSCameraUsageDescription'])
+          print('NSMicrophoneUsageDescription:', pl['NSMicrophoneUsageDescription'])
+          EOF
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - name: Build and upload to TestFlight
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          CERT_P12_BASE64: ${{ secrets.CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.CERT_PASSWORD }}
+        run: bundle exec fastlane beta
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: in-the-midst-ios
+          path: build/InTheMidst.ipa
+          if-no-files-found: error
