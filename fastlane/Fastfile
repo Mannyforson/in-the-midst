@@ -1,0 +1,93 @@
+require "base64"
+
+default_platform(:ios)
+
+APP_ID = "com.inthemidst.app"
+
+platform :ios do
+  desc "Build a signed App Store IPA and upload it to TestFlight"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APP_STORE_CONNECT_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+      key_content: ENV["APP_STORE_CONNECT_PRIVATE_KEY"],
+      is_key_content_base64: false,
+      in_house: false
+    )
+
+    # App Store Connect app record + App ID, created if missing. If this
+    # fails, create the app record manually in App Store Connect (bundle ID
+    # com.inthemidst.app) and re-run; this step is safe to repeat.
+    produce(
+      api_key: api_key,
+      app_identifier: APP_ID,
+      app_name: "In the Midst",
+      language: "English",
+      sku: "inthemidst"
+    )
+
+    # Deterministic throwaway keychain for this run (ephemeral runner).
+    create_keychain(
+      name: "build",
+      password: "temp",
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600
+    )
+
+    if ENV["CERT_P12_BASE64"] && !ENV["CERT_P12_BASE64"].empty?
+      # Steady state: reuse one stored distribution certificate + private key.
+      # This avoids creating a new certificate on every run.
+      File.write("cert.p12", Base64.decode64(ENV["CERT_P12_BASE64"]))
+      import_certificate(
+        certificate_path: "cert.p12",
+        certificate_password: ENV["CERT_PASSWORD"],
+        keychain_name: "build",
+        keychain_password: "temp"
+      )
+      sh("rm -f cert.p12")
+    else
+      # Bootstrap only: creates a NEW distribution certificate on every run,
+      # because the ephemeral runner keeps no keychain between runs. Apple
+      # allows only ~2-3 active distribution certificates per team, so
+      # migrate to the CERT_P12_BASE64 + CERT_PASSWORD mode above before
+      # that limit is hit (create one distribution certificate via an
+      # openssl CSR + developer.apple.com, export it as .p12, store it as
+      # secrets). Do NOT publish the .p12 as a workflow artifact.
+      cert(api_key: api_key)
+    end
+
+    # App Store provisioning profile (default sigh type is App Store).
+    sigh(
+      api_key: api_key,
+      app_identifier: APP_ID
+    )
+
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "ios/App/App.xcodeproj",
+      targets: "App",
+      code_sign_identity: "Apple Distribution",
+      profile_name: lane_context[SharedValues::SIGH_PROFILE_NAME]
+    )
+
+    gym(
+      scheme: "App",
+      project: "ios/App/App.xcodeproj",
+      configuration: "Release",
+      clean: true,
+      export_method: "app-store-connect",
+      output_directory: "build",
+      output_name: "InTheMidst"
+    )
+
+    # Internal TestFlight testers only by default (external distribution
+    # needs App Review). Does not wait for build processing to finish.
+    pilot(
+      api_key: api_key,
+      app_identifier: APP_ID,
+      ipa: "build/InTheMidst.ipa",
+      skip_waiting_for_build_processing: true
+    )
+  end
+end
