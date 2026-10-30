@@ -94,7 +94,7 @@ jobs:
         run: |
           cd android
           ./gradlew bundleRelease --no-daemon \
-            -Pandroid.injected.signing.store.file=app/upload-key.p12 \
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/android/app/upload-key.p12 \
             -Pandroid.injected.signing.store.password="$STORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
