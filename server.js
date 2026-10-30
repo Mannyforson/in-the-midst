@@ -185,7 +185,14 @@ const app = {
   get: (p, fn) => routes.push({ method: 'GET', p, fn }),
 };
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://localhost');
+  
+const url = new URL(req.url, 'http://localhost');
+  if (url.pathname.startsWith('/api/')) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+  }
   for (const r of routes) {
     if (r.method !== req.method) continue;
     const keys = [];
