@@ -1,0 +1,94 @@
+# In the Midst — EAS cloud build (GitHub Actions)
+#
+# PLACEMENT
+#   This file lives in the app project root for now. When the project moves
+#   into the repo, copy it to .github/workflows/eas-build.yml. No step
+#   needs changing: every npm/eas step already runs with
+#   working-directory: app, because the project will live under app/ in
+#   the repo.
+#
+# TRIGGER
+#   workflow_dispatch ONLY. Builds are deliberate, never on push: a push
+#   must not start a cloud build or consume EAS minutes.
+#
+# HOW IT WORKS
+#   The GitHub runner only drives the EAS CLI; the actual builds run on
+#   EAS cloud servers. That is why both jobs use ubuntu-latest — even the
+#   iOS build needs no macOS runner here. The CLI authenticates with the
+#   EXPO_TOKEN repository secret (never a hardcoded token) and the project
+#   is linked via app.json (expo.extra.eas.projectId).
+#
+# INPUTS
+#   platform: all (default) builds Android and iOS in parallel jobs;
+#   android / ios build only that platform. profile: development
+#   (default, builds a dev client), preview, or production (store).
+#
+# DEPENDENCIES
+#   No lockfile exists in the project yet, so the workflow uses
+#   npm install (not npm ci). Once a lockfile is committed, switch to
+#   npm ci for reproducible installs.
+
+name: EAS Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Platform to build"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+      profile:
+        description: "EAS build profile"
+        required: false
+        default: "development"
+        type: choice
+        options:
+          - development
+          - preview
+          - production
+
+jobs:
+  build-android:
+    name: EAS build (Android)
+    if: ${{ inputs.platform == 'all' || inputs.platform == 'android' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        working-directory: app
+        run: npm install
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+      - name: Build with EAS
+        working-directory: app
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas build --platform android --profile ${{ inputs.profile }} --non-interactive
+
+  build-ios:
+    name: EAS build (iOS)
+    if: ${{ inputs.platform == 'all' || inputs.platform == 'ios' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        working-directory: app
+        run: npm install
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+      - name: Build with EAS
+        working-directory: app
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas build --platform ios --profile ${{ inputs.profile }} --non-interactive
