@@ -1,21 +1,24 @@
 {
-  "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal"
+    "build": {
+      "development": {
+        "developmentClient": true,
+        "distribution": "internal"
+      },
+      "preview": {
+        "distribution": "internal"
+      },
+      "production": {
+        "distribution": "store",
+        "ios": {
+          "image": "macos-sequoia-15.6-xcode-26.0"
+        }
+      }
     },
-    "preview": {
-      "distribution": "internal"
-    },
-    "production": {
-      "distribution": "store"
-    }
-  },
-  "submit": {
-    "production": {
-      "ios": {
-        "ascAppId": "6828960970"
+    "submit": {
+      "production": {
+        "ios": {
+          "ascAppId": "6828960970"
+        }
       }
     }
-  }
 }
