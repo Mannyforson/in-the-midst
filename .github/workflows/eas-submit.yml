@@ -1,0 +1,47 @@
+# In the Midst — EAS submit to TestFlight (GitHub Actions)
+#
+# workflow_dispatch ONLY. Submits the latest successful production iOS
+# build to TestFlight (internal testers only); it never submits to
+# App Store Review. Mirrors eas-build.yml: ubuntu-latest runner,
+# Node 20, eas-cli installed with npm, steps run in app/, and the
+# CLI authenticates with the EXPO_TOKEN repository secret.
+
+name: EAS Submit
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Platform to submit"
+        required: false
+        default: "ios"
+        type: choice
+        options:
+          - ios
+      profile:
+        description: "EAS submit profile"
+        required: false
+        default: "production"
+        type: choice
+        options:
+          - production
+
+jobs:
+  submit-ios:
+    name: EAS submit (iOS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        working-directory: app
+        run: npm install
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+      - name: Submit to TestFlight with EAS
+        working-directory: app
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas submit --platform ios --profile production --non-interactive --latest
