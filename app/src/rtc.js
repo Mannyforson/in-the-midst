@@ -15,7 +15,7 @@ const {
   RTCSessionDescription,
   RTCIceCandidate,
   mediaDevices,
-} = require('react-native-webrtc');
+} = require('./webrtc-stub');
 
 const DEFAULT_ICE = [{ urls: 'stun:stun.l.google.com:19302' }];
 
@@ -78,7 +78,7 @@ class PeerManager {
     // react-native-webrtc MediaStream: create via the module's MediaStream.
     // Kept lazy (created on first track) to avoid importing it at module top
     // in environments where the native module is absent.
-    const { MediaStream } = require('react-native-webrtc');
+      const { MediaStream } = require('./webrtc-stub');
     peer.stream = new MediaStream();
     this.peers.set(id, peer);
 
