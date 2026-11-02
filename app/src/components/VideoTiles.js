@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { RTCView } from 'react-native-webrtc';
+import { RTCView } from '../webrtc-stub';
 
 // Video tile grid, mirroring the web app's stage layout.
 // - Self tile first (mirrored preview), then one tile per other participant.
