@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SignalingClient, fetchIce } from '../signaling';
 import { PeerManager, acquireMedia } from '../rtc';
-import { MediaStream, mediaDevices } from 'react-native-webrtc';
+import { MediaStream, mediaDevices } from '../webrtc-stub';
 import { SERVER_URL, formatCode } from '../constants';
 import storage from '../storage';
 import VideoTiles from '../components/VideoTiles';
